@@ -31,6 +31,22 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    /**
+     * GET /auth/me
+     * Returns the current user profile from the JWT subject claim.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> me(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new com.loyalty.identity_service.exception.UnauthorizedException(
+                    "Missing or invalid Authorization header");
+        }
+        String token = authHeader.substring(7);
+        UserResponse user = authService.getCurrentUser(token);
+        return ResponseEntity.ok(ApiResponse.ok(user));
+    }
+
 
     /**
      * POST /auth/logout
