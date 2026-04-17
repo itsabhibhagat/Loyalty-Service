@@ -1,9 +1,11 @@
 package com.loyalty.identity_service.service;
 
+import com.loyalty.identity_service.config.JwtService;
 import com.loyalty.identity_service.dto.*;
 import com.loyalty.identity_service.entity.AdminUser;
 import com.loyalty.identity_service.entity.AdminUserStatus;
 
+import com.loyalty.identity_service.entity.RefreshToken;
 import com.loyalty.identity_service.entity.TenantRegistry;
 import com.loyalty.identity_service.repository.AdminUserRepository;
 import com.loyalty.identity_service.repository.TenantRegistryRepository;
@@ -12,6 +14,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.loyalty.identity_service.repository.UserRoleRepository;
+import com.loyalty.identity_service.repository.UserStoreScopeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +31,10 @@ public class AuthService {
     private final TenantRegistryRepository tenantRegistryRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
+    private final RefreshTokenService refreshTokenService;
+    private final UserRoleRepository userRoleRepository;
+    private final UserStoreScopeRepository userStoreScopeRepository;
+    private final JwtService jwtService;
 
     @Transactional
     public AuthResponse login(LoginRequest request, String ipAddress, String userAgent) {
@@ -86,6 +94,34 @@ public class AuthService {
 
         // Build response (steps 9-17)
         return buildAuthResponse(user, tenant, UUID.randomUUID(), ipAddress, userAgent, false);
+    }
+
+    @Transactional
+    public AuthResponse refresh(RefreshRequest request, String ipAddress, String userAgent) {
+        RefreshToken token = refreshTokenService.validateAndGetToken(request.getRefreshToken());
+
+        if (token == null) {
+            throw new com.loyalty.identity_service.exception.UnauthorizedException("Invalid or expired refresh token");
+        }
+
+        AdminUser user = token.getUser();
+        if (!user.isActive()) {
+            throw new com.loyalty.identity_service.exception.UnauthorizedException("User account is not active");
+        }
+
+        TenantRegistry tenant = tenantRegistryRepository.findById(user.getTenantId())
+                .orElseThrow(
+                        () -> new com.loyalty.identity_service.exception.UnauthorizedException("Tenant not found"));
+
+        String newRefreshToken = refreshTokenService.rotateToken(token, user, tenant, ipAddress, userAgent);
+
+        AuthResponse res = buildAuthResponse(user, tenant, token.getTokenFamily(), ipAddress, userAgent, true);
+        // Override the token with the rotated one
+        res.setRefreshToken(newRefreshToken);
+
+        auditService.logTokenRefreshed(user, ipAddress, userAgent);
+
+        return res;
     }
 
 
