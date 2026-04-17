@@ -13,4 +13,7 @@ import org.springframework.stereotype.Repository;
 public interface AdminUserRepository extends JpaRepository<AdminUser, UUID> {
 
     Optional<AdminUser> findByTenantIdAndEmailIgnoreCase(UUID tenantId, String email);
+    Page<AdminUser> findByTenantIdAndStatus(UUID tenantId, AdminUserStatus status, Pageable pageable);
+
+    Page<AdminUser> findByTenantId(UUID tenantId, Pageable pageable);
 }
